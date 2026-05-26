@@ -21,8 +21,13 @@ const __dirname = path.dirname(__filename);
 
 const scope = 'atproto transition:generic';
 
-// 手動設定したBASE_URLを最優先に読み込み、1文字のズレも防ぎます
-const baseUrl = process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
+// 💡 【王道・自動化】入力ミスを防ぐため、手動設定は見ず、Renderの自動発行URLのみを100%信用する
+let baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
+
+// 💡 【安全装置】万が一、URLの末尾に「/」が入っていた場合はプログラムが自動で綺麗に削除する
+if (baseUrl.endsWith('/')) {
+  baseUrl = baseUrl.slice(0, -1);
+}
 
 app.use(express.json());
 app.use(cors());
@@ -59,7 +64,6 @@ const sessionStore = {
   },
 };
 
-// 💡 対策：エラーの原因だった変数を廃止し、URLを直接組み立てる形にしました
 const client = new NodeOAuthClient({
   clientMetadata: {
     client_name: 'Liber3D',
