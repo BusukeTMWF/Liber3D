@@ -126,12 +126,17 @@ app.post('/api/post', async (req, res) => {
 });
 
 if (process.env.NODE_ENV === 'production') {
-  // 💡 まずは静的ファイル(CSS, JS, 画像など)が実在するか確認し、あればそのまま返す
+  // 1. まず「dist」フォルダの中のファイル（js, css, etc...）を直接探しに行く
   app.use(express.static(path.join(__dirname, '../dist')));
 
-  // 💡 静的ファイル以外のURL（アプリのルートや各ページ）なら、index.htmlを返す
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  // 2. それ以外の「ページ遷移」に関するアクセスは、すべて index.html に誘導する
+  // ※アスタリスクを使わない安全な書き方です
+  app.use((req, res, next) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(__dirname, '../dist/index.html'));
+    } else {
+      next();
+    }
   });
 }
 
