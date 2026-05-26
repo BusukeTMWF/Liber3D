@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
+**app.set('trust proxy', true); // 👈 クラウド環境でURLのズレ（http/https）を無くす王道設定！**
 const port = process.env.PORT || 3000;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,7 +18,7 @@ const __dirname = path.dirname(__filename);
 
 const scope = 'atproto transition:generic';
 
-const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.BASE_URL || `http://localhost:${port}`;const redirectUri = `${baseUrl}/callback`;
+const baseUrl = process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
 const clientId = `${baseUrl}/client-metadata.json`;
 
 app.use(express.json());
