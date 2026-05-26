@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/client-metadata.json", "destination": "/api" },
+    { "source": "/callback", "destination": "/api" },
+    { "source": "/api/(.*)", "destination": "/api" }
+  ]
+}

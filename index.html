@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liber3D - 安全な3Dデータ共有</title>
+    <style>
+        body { margin: 0; background-color: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
+        #info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 10; max-width: 300px; }
+        h1 { margin: 0 0 5px 0; font-size: 1.2rem; color: #00a0e9; }
+        input, button { width: 100%; padding: 10px; margin-top: 8px; box-sizing: border-box; border-radius: 4px; border: none; font-size: 0.9rem; }
+        input { background: #333; color: white; }
+        button { background: #00a0e9; color: white; font-weight: bold; cursor: pointer; }
+        button:hover { background: #0082bc; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #profile-area { margin-top: 10px; border-top: 1px solid #444; padding-top: 10px; display: none; }
+        #measure-area { margin-top: 10px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px; display: none; font-size: 0.85rem; }
+        #measure-area h2 { margin: 0 0 5px 0; font-size: 0.9rem; color: #ffaa00; }
+        #upload-form { margin-top: 15px; border-top: 1px dashed #555; padding-top: 15px; display: none; }
+        .notice { font-size: 0.7rem; color: #aaa; margin-top: 8px; line-height: 1.3; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>Liber3D</h1>
+        <p style="font-size: 0.8rem; color: #aaa;">3Dプリントパーツ共有プラットフォーム</p>
+        
+        <div id="login-form">
+            <form action="http://127.0.0.1:3000/api/login" method="GET">
+                <input type="text" name="handle" id="handle" placeholder="あなたのユーザー名（例: user.bsky.social）" required>
+                <button type="submit" id="login-btn">🦋 Blueskyで安全にログイン</button>
+            </form>
+            <div class="notice">🔒 パスワードは不要です。Bluesky公式画面で認証を行います。</div>
+        </div>
+
+        <div id="profile-area">
+            <p id="welcome-msg">ログイン情報を確認中...</p>
+        </div>
+
+        <div id="measure-area">
+            <h2>📐 パーツ寸法 (自動計測)</h2>
+            <div id="size-x">横幅 (X): -- mm</div>
+            <div id="size-y">奥行 (Y): -- mm</div>
+            <div id="size-z">高さ (Z): -- mm</div>
+        </div>
+
+        <div id="upload-form">
+            <p style="font-size: 0.8rem; color: #00a0e9; margin: 0;">① STLファイルを画面にドロップ</p>
+            <input type="text" id="part-name" placeholder="パーツの名前（例: スマホスタンド）" disabled>
+            <button id="upload-btn" disabled>Liber3Dに作品を投稿する</button>
+        </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+</body>
+</html>
