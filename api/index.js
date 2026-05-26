@@ -32,36 +32,36 @@ if (process.env.NODE_ENV === 'production') {
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-// 💡 【王道アップグレード】エラーログを可視化し、安全な.maybeSingle()形式に変更
+// 💡 【デプロイ最後の王道設計】エラーを隠さず、その場でスローして画面に原因を表示させる
 const stateStore = {
   async get(key) {
     const { data, error } = await supabase.from('auth_store').select('value').eq('key', `state:${key}`).maybeSingle();
-    if (error) console.error('❌ SupabaseからStateの取得に失敗:', error);
+    if (error) throw new Error(`DBからの鍵取得に失敗: ${error.message} (${error.details || ''})`);
     return data ? data.value : undefined;
   },
   async set(key, val) {
     const { error } = await supabase.from('auth_store').upsert({ key: `state:${key}`, value: val });
-    if (error) console.error('❌ SupabaseへのStateの保存に失敗:', error);
+    if (error) throw new Error(`DBへの鍵保存に失敗: ${error.message} (${error.details || ''})`);
   },
   async del(key) {
     const { error } = await supabase.from('auth_store').delete().eq('key', `state:${key}`);
-    if (error) console.error('❌ SupabaseからのStateの削除に失敗:', error);
+    if (error) throw new Error(`DBからの鍵削除に失敗: ${error.message} (${error.details || ''})`);
   },
 };
 
 const sessionStore = {
   async get(key) {
     const { data, error } = await supabase.from('auth_store').select('value').eq('key', `session:${key}`).maybeSingle();
-    if (error) console.error('❌ SupabaseからSessionの取得に失敗:', error);
+    if (error) throw new Error(`DBからのセッション取得に失敗: ${error.message} (${error.details || ''})`);
     return data ? data.value : undefined;
   },
   async set(key, val) {
     const { error } = await supabase.from('auth_store').upsert({ key: `session:${key}`, value: val });
-    if (error) console.error('❌ SupabaseへのSessionの保存に失敗:', error);
+    if (error) throw new Error(`DBへのセッション保存に失敗: ${error.message} (${error.details || ''})`);
   },
   async del(key) {
     const { error } = await supabase.from('auth_store').delete().eq('key', `session:${key}`);
-    if (error) console.error('❌ SupabaseからのSessionの削除に失敗:', error);
+    if (error) throw new Error(`DBからのセッション削除に失敗: ${error.message} (${error.details || ''})`);
   },
 };
 
@@ -93,6 +93,7 @@ app.get('/api/login', async (req, res) => {
     const url = await client.authorize(handle, { scope: scope });
     res.redirect(url);
   } catch (error) {
+    // 💡 ここでSupabaseの保存エラーが起きていれば、即座に画面に表示されます！
     res.status(500).send('OAuth開始エラー: ' + error.message);
   }
 });
