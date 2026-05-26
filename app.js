@@ -6,6 +6,9 @@ let isLoggedIn = false;
 let isFileLoaded = false;
 let userDid = null;
 
+// 💡 王道機能：計測したサイズを一時的に保存しておく変数
+let measuredSize = { x: "0.0", y: "0.0", z: "0.0" };
+
 // ==========================================
 // 1. ログイン状態のチェック（URLに鍵があるか？）
 // ==========================================
@@ -24,8 +27,6 @@ if (did) {
     window.history.replaceState({}, document.title, "/");
 }
 
-// 💡 ログインボタンの処理は、HTMLのform機能に任せるため削除しました！
-
 // ==========================================
 // 2. 投稿ボタンを押したときの処理（サーバーへ依頼）
 // ==========================================
@@ -38,7 +39,8 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
         uploadBtn.innerText = '投稿中...';
         uploadBtn.disabled = true;
 
-        const postText = `【Liber3D】\n3Dプリントパーツ「${partName}」をアプリパスワードなしで登録しました！ #Liber3D`;
+        // 💡 収益化を見据えた王道テキスト：自動計測されたサイズをメッセージに自動注入！
+        const postText = `【Liber3D】\n3Dプリントパーツ「${partName}」を登録しました！\n\n📐 自動計測サイズ:\n・横幅(X): ${measuredSize.x} mm\n・奥行(Y): ${measuredSize.y} mm\n・高さ(Z): ${measuredSize.z} mm\n\n#Liber3D`;
 
         const response = await fetch('/api/post', {
             method: 'POST',
@@ -118,6 +120,9 @@ window.addEventListener('drop', (e) => {
         const sizeX = (box.max.x - box.min.x).toFixed(1);
         const sizeY = (box.max.y - box.min.y).toFixed(1);
         const sizeZ = (box.max.z - box.min.z).toFixed(1);
+
+        // 💡 取得したサイズを記憶用の変数に保存
+        measuredSize = { x: sizeX, y: sizeY, z: sizeZ };
 
         document.getElementById('measure-area').style.display = 'block';
         document.getElementById('size-x').innerText = `横幅 (X): ${sizeX} mm`;
