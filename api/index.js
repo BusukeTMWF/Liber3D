@@ -126,7 +126,11 @@ app.post('/api/post', async (req, res) => {
 });
 
 if (process.env.NODE_ENV === 'production') {
-  app.use((req, res) => {
+  // 💡 まずは静的ファイル(CSS, JS, 画像など)が実在するか確認し、あればそのまま返す
+  app.use(express.static(path.join(__dirname, '../dist')));
+
+  // 💡 静的ファイル以外のURL（アプリのルートや各ページ）なら、index.htmlを返す
+  app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
