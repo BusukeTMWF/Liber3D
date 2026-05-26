@@ -11,20 +11,14 @@ import { createClient } from '@supabase/supabase-js';
 dotenv.config();
 
 const app = express();
-// Renderのプロキシ（中継器）を信頼し、https通信を正しく維持する設定
 app.set('trust proxy', true);
 
 const port = process.env.PORT || 3000;
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const scope = 'atproto transition:generic';
 
-// 💡 【王道・自動化】入力ミスを防ぐため、手動設定は見ず、Renderの自動発行URLのみを100%信用する
 let baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-
-// 💡 【安全装置】万が一、URLの末尾に「/」が入っていた場合はプログラムが自動で綺麗に削除する
 if (baseUrl.endsWith('/')) {
   baseUrl = baseUrl.slice(0, -1);
 }
@@ -38,29 +32,36 @@ if (process.env.NODE_ENV === 'production') {
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
+// 💡 【王道アップグレード】エラーログを可視化し、安全な.maybeSingle()形式に変更
 const stateStore = {
   async get(key) {
-    const { data } = await supabase.from('auth_store').select('value').eq('key', `state:${key}`).single();
+    const { data, error } = await supabase.from('auth_store').select('value').eq('key', `state:${key}`).maybeSingle();
+    if (error) console.error('❌ SupabaseからStateの取得に失敗:', error);
     return data ? data.value : undefined;
   },
   async set(key, val) {
-    await supabase.from('auth_store').upsert({ key: `state:${key}`, value: val });
+    const { error } = await supabase.from('auth_store').upsert({ key: `state:${key}`, value: val });
+    if (error) console.error('❌ SupabaseへのStateの保存に失敗:', error);
   },
   async del(key) {
-    await supabase.from('auth_store').delete().eq('key', `state:${key}`);
+    const { error } = await supabase.from('auth_store').delete().eq('key', `state:${key}`);
+    if (error) console.error('❌ SupabaseからのStateの削除に失敗:', error);
   },
 };
 
 const sessionStore = {
   async get(key) {
-    const { data } = await supabase.from('auth_store').select('value').eq('key', `session:${key}`).single();
+    const { data, error } = await supabase.from('auth_store').select('value').eq('key', `session:${key}`).maybeSingle();
+    if (error) console.error('❌ SupabaseからSessionの取得に失敗:', error);
     return data ? data.value : undefined;
   },
   async set(key, val) {
-    await supabase.from('auth_store').upsert({ key: `session:${key}`, value: val });
+    const { error } = await supabase.from('auth_store').upsert({ key: `session:${key}`, value: val });
+    if (error) console.error('❌ SupabaseへのSessionの保存に失敗:', error);
   },
   async del(key) {
-    await supabase.from('auth_store').delete().eq('key', `session:${key}`);
+    const { error } = await supabase.from('auth_store').delete().eq('key', `session:${key}`);
+    if (error) console.error('❌ SupabaseからのSessionの削除に失敗:', error);
   },
 };
 
@@ -130,5 +131,5 @@ if (process.env.NODE_ENV === 'production') {
 export default app;
 
 app.listen(port, () => {
-  console.log(`🚀 サーバー起動中（ポート: ${port}）`);
+  console.log(`🚀 鉄壁サーバー起動中（ポート: ${port}）`);
 });
