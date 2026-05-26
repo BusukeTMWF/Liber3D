@@ -26,8 +26,10 @@ if (baseUrl.endsWith('/')) {
 app.use(express.json());
 app.use(cors());
 
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../dist')));
+// 💡 【王道デバッグ】URLが空っぽなら即座にエラーを吐いて停止する仕様に
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+  console.error('❌ FATAL ERROR: Supabaseの環境変数が設定されていません！');
+  process.exit(1); // サーバーを強制終了して異常を通知
 }
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
