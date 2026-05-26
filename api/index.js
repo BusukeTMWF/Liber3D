@@ -17,8 +17,7 @@ const __dirname = path.dirname(__filename);
 
 const scope = 'atproto transition:generic';
 
-const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
-const redirectUri = `${baseUrl}/callback`;
+const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.BASE_URL || `http://localhost:${port}`;const redirectUri = `${baseUrl}/callback`;
 const clientId = `${baseUrl}/client-metadata.json`;
 
 app.use(express.json());
