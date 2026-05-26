@@ -6,11 +6,14 @@ import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { JoseKey } from '@atproto/jwk-jose';
 import { Agent } from '@atproto/api';
 import dotenv from 'dotenv';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
 const app = express();
-app.set('trust proxy', true); // 👈 クラウド環境でURLのズレ（http/https）を無くす王道設定！**
+// Renderのプロキシ（中継器）を信頼し、https通信を正しく維持する設定
+app.set('trust proxy', true);
+
 const port = process.env.PORT || 3000;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,8 +21,8 @@ const __dirname = path.dirname(__filename);
 
 const scope = 'atproto transition:generic';
 
+// 手動設定したBASE_URLを最優先に読み込み、1文字のズレも防ぎます
 const baseUrl = process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-const clientId = `${baseUrl}/client-metadata.json`;
 
 app.use(express.json());
 app.use(cors());
@@ -28,7 +31,6 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../dist')));
 }
 
-import { createClient } from '@supabase/supabase-js';
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 const stateStore = {
@@ -57,11 +59,12 @@ const sessionStore = {
   },
 };
 
+// 💡 対策：エラーの原因だった変数を廃止し、URLを直接組み立てる形にしました
 const client = new NodeOAuthClient({
   clientMetadata: {
     client_name: 'Liber3D',
-    client_id: clientId,
-    redirect_uris: [redirectUri],
+    client_id: `${baseUrl}/client-metadata.json`,
+    redirect_uris: [`${baseUrl}/callback`],
     scope: scope,
     response_types: ['code'],
     grant_types: ['authorization_code'],
@@ -114,8 +117,6 @@ app.post('/api/post', async (req, res) => {
   }
 });
 
-// 💡 修正ポイント：文字パターンを完全に廃止！
-// 上記のどのURL（API等）にもヒットしなかったアクセスは、自動的にすべてここになだれ込み、Viteの画面を返します。
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
