@@ -119,9 +119,9 @@ app.post('/api/post', async (req, res) => {
   }
 });
 
-// 💡 本番環境（Render）の時、トップページにアクセスされたらViteの画面を返す
+// ⭕ 修正後
 if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
+  app.get('(.*)', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
