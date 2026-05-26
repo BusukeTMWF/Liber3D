@@ -123,8 +123,6 @@ if (process.env.NODE_ENV === 'production') {
 
 export default app;
 
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(port, () => {
-    console.log(`🚀 ローカルサーバー起動中: http://localhost:${port}`);
-  });
-}
+app.listen(port, () => {
+  console.log(`🚀 サーバー起動中（ポート: ${port}）`);
+});
