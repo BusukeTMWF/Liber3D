@@ -5,10 +5,6 @@ import { fileURLToPath } from 'url';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { JoseKey } from '@atproto/jwk-jose';
 import { Agent } from '@atproto/api';
-import dotenv from 'dotenv';
-
-// 💡 .envファイルから設定を読み込む（プロの基本）
-dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -18,29 +14,50 @@ const __dirname = path.dirname(__filename);
 
 const scope = 'atproto transition:generic';
 
-// 💡 コードからURLが完全に消え、環境変数から安全に読み込む形になりました
-const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+// 💡 Renderが自動で発行してくれる本番URLを取得する魔法の環境変数
+// （ローカルの時は自動で http://localhost:3000 になります）
+const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
 const redirectUri = `${baseUrl}/callback`;
 const clientId = `${baseUrl}/client-metadata.json`;
 
 app.use(express.json());
 app.use(cors());
 
+// 💡 本番環境（Render）の時は、Viteがビルドした画面（distフォルダ）をExpressが一緒に配信する
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../dist')));
 }
 
-// ⚠️ ここは現在暫定のメモリですが、次のステップでここを本物のデータベースに繋ぎ変えます！
-const memoryStore = new Map();
+import { createClient } from '@supabase/supabase-js';
+
+// 💡 Supabaseデータベースの起動
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+// 💡 【プロ仕様】一時的なメモリではなく、本物のデータベースに記憶を書き込むように変更！
 const stateStore = {
-  async get(key) { return memoryStore.get(`state:${key}`); },
-  async set(key, val) { memoryStore.set(`state:${key}`, val); },
-  async del(key) { memoryStore.delete(`state:${key}`); },
+  async get(key) {
+    const { data } = await supabase.from('auth_store').select('value').eq('key', `state:${key}`).single();
+    return data ? data.value : undefined;
+  },
+  async set(key, val) {
+    await supabase.from('auth_store').upsert({ key: `state:${key}`, value: val });
+  },
+  async del(key) {
+    await supabase.from('auth_store').delete().eq('key', `state:${key}`);
+  },
 };
+
 const sessionStore = {
-  async get(key) { return memoryStore.get(`session:${key}`); },
-  async set(key, val) { memoryStore.set(`session:${key}`, val); },
-  async del(key) { memoryStore.delete(`session:${key}`); },
+  async get(key) {
+    const { data } = await supabase.from('auth_store').select('value').eq('key', `session:${key}`).single();
+    return data ? data.value : undefined;
+  },
+  async set(key, val) {
+    await supabase.from('auth_store').upsert({ key: `session:${key}`, value: val });
+  },
+  async del(key) {
+    await supabase.from('auth_store').delete().eq('key', `session:${key}`);
+  },
 };
 
 const client = new NodeOAuthClient({
@@ -55,7 +72,9 @@ const client = new NodeOAuthClient({
     application_type: 'web',
     dpop_bound_access_tokens: true
   },
-  keyset: await Promise.all([JoseKey.generate(['ES256'])]),
+  keyset: await Promise.all([
+    JoseKey.generate(['ES256']),
+  ]),
   stateStore: stateStore,
   sessionStore: sessionStore,
 });
@@ -100,12 +119,14 @@ app.post('/api/post', async (req, res) => {
   }
 });
 
+// 💡 本番環境（Render）の時、トップページにアクセスされたらViteの画面を返す
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
 
+// 💡 Render（常駐サーバー）では listen が絶対に必要なので、常に起動するように戻します
 app.listen(port, () => {
-  console.log(`🚀 王道アーキテクチャサーバー起動中: ${baseUrl}`);
+  console.log(`🚀 サーバー起動中: ${baseUrl}`);
 });
