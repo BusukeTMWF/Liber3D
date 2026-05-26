@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-**app.set('trust proxy', true); // 👈 クラウド環境でURLのズレ（http/https）を無くす王道設定！**
+app.set('trust proxy', true); // 👈 クラウド環境でURLのズレ（http/https）を無くす王道設定！**
 const port = process.env.PORT || 3000;
 
 const __filename = fileURLToPath(import.meta.url);
