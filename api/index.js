@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
-import { BskyAgent } from '@atproto/api';
+import { Agent } from '@atproto/api'; // 💡 BskyAgent ではなく Agent を使います！
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import multer from 'multer'; 
 
@@ -115,15 +115,14 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
   }
 
   try {
-    const { data: user, error: dbError } = await supabase
-      .from('users')
-      .select('session')
-      .eq('did', did)
-      .single();
+    // 👑 【完全自動化】ライブラリに「このDIDのユーザーの鍵を復元して！」とお願いするだけ！
+    // （裏側で勝手にSupabaseの sessionStore を読みに行ってくれます）
+    const userSession = await oauthClient.restore(did);
+    if (!userSession) {
+      throw new Error('セッションが見つかりません。再ログインしてください。');
+    }
 
-    if (dbError || !user) throw new Error('ユーザーのセッションが見つかりません。再ログインしてください。');
-
-    // 💡 【修正】DIDの中のコロン(:)をすべてハイフン(-)に置き換えて、Supabaseが怒らない安全な名前にする
+    // 💡 ファイル名は16進数で安全に処理（先ほどの修正のまま）
     const safeDid = did.replaceAll(':', '-');
     const safeName = Buffer.from(partName, 'utf8').toString('hex');
     const fileName = `${safeDid}_${safeName}.glb`;
@@ -138,7 +137,10 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
 
     if (storageError) throw new Error(`ストレージ保存失敗: ${storageError.message}`);
 
-    await agent.resumeSession(user.session);
+    // 👑 【最新の投稿方式】復元した OAuth セッションを使って、最新の Agent を起動！
+    const agent = new Agent(userSession);
+    
+    // Blueskyへポスト！
     await agent.post({
       text: text,
       createdAt: new Date().toISOString()
@@ -150,6 +152,7 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 // ==========================================
 // 🔒 ログイン＆コールバック ルーティング
