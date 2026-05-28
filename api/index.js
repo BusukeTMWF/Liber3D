@@ -34,6 +34,8 @@ const clientMetadata = {
   grant_types: ['authorization_code', 'refresh_token'],
   response_types: ['code'],
   token_endpoint_auth_method: 'none',
+  application_type: 'web', // 💡 念のため「Webアプリです」という宣言も入れておくと完璧です
+  dpop_bound_access_tokens: true // 👈 【新規追加】これを書かないとBlueskyに弾かれます！
 };
 
 // OAuthクライアントに固定した名刺を渡す
