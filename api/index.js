@@ -3,8 +3,8 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
-import { BskyAgent } from '@atproto/api'; // 💡 通常のタイムライン投稿用
-import { NodeOAuthClient } from '@atproto/oauth-client-node'; // 💡 ログインエラーを絶対防ぐための本尊
+import { BskyAgent } from '@atproto/api';
+import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import multer from 'multer'; 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,15 +14,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// メモリ上でファイルを一時保持（multerの設定）
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Supabaseクライアントの初期化
+// Supabaseクライアントの初期化（自動整形付き）
 const rawUrl = process.env.SUPABASE_URL || '';
 const cleanUrl = rawUrl.trim().replace(/\/$/, '').replace(/^http:/, 'https');
 const supabase = createClient(cleanUrl, process.env.SUPABASE_ANON_KEY || '');
 
-// 💡 【超重要：エラー解決の鍵】
-// initiateLogin を絶対に失敗させないために、OAuthクライアントを正しく初期化します
+// 💡 【仕様変更：修正済】公式ライブラリが100%要求する正しいStateStoreの形
+const stateStore = {
+  async set(key, val) {
+    await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
+  },
+  async get(key) {
+    const { data } = await supabase.from('oauth_states').select('value').eq('key', key).maybeSingle();
+    return data ? data.value : undefined;
+  },
+  async del(key) { // 👈 公式仕様の「del」にガッチリ戻しました！
+    await supabase.from('oauth_states').delete().eq('key', key);
+  }
+};
+
+// 💡 OAuthクライアントの正式初期化
 const oauthClient = new NodeOAuthClient({
   clientMetadata: {
     client_name: 'Liber3D',
@@ -34,26 +48,13 @@ const oauthClient = new NodeOAuthClient({
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
   },
-  stateStore: {
-    async set(key, val) {
-      await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
-    },
-    async get(key) {
-      const { data } = await supabase.from('oauth_states').select('value').eq('key', key).single();
-      return data ? data.value : undefined;
-    },
-    // 👇 名前を「delete」に修正（Expressの strict モードでもバグらないようにクォーテーションで囲むのがプロの王道です）
-    async "delete"(key) {
-      await supabase.from('oauth_states').delete().eq('key', key);
-    }
-  }
+  stateStore: stateStore // 👈 定義したオブジェクトをここで確実に結合！
 });
 
-// 通常の投稿などで使うエージェント
 const agent = new BskyAgent({ service: 'https://bsky.social' });
 
 // ==========================================
-// 🚀 3Dファイルのアップロード＆投稿API（ここはそのまま維持）
+// 🚀 3Dファイルのアップロード＆投稿API
 // ==========================================
 app.post('/api/post', upload.single('file'), async (req, res) => {
   const { did, text, partName } = req.body;
@@ -92,13 +93,13 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('【本尊エラー】:', error.message);
+    console.error('【投稿エラー】:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // ==========================================
-// 🔒 【修正】エラーをねじ伏せる新しいログインルーティング
+// 🔒 ログイン＆コールバック ルーティング
 // ==========================================
 app.get('/api/login', async (req, res) => {
   try {
@@ -106,7 +107,6 @@ app.get('/api/login', async (req, res) => {
     const handle = logParam.trim().replace(/^@/, '');
     if (!handle) return res.status(400).json({ error: 'Handle is required' });
 
-    // 💡 oauthClient から正しくログインURLを生成します（これで undefined エラーは消滅します）
     const authUrl = await oauthClient.initiateLogin({
       handle: handle,
       state: Math.random().toString(36).substring(2),
@@ -120,7 +120,6 @@ app.get('/api/login', async (req, res) => {
 
 app.get('/api/callback', async (req, res) => {
   try {
-    // 💡 コールバックも新しい oauthClient で安全に処理
     const result = await oauthClient.callback(req.query);
     const session = result.session;
     const did = session.did;
@@ -138,7 +137,7 @@ app.get('/api/callback', async (req, res) => {
   }
 });
 
-// 以下、本番環境用のスタティックファイル配信（変更なし）
+// 本番環境用のスタティックファイル配信
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../dist')));
   app.use((req, res, next) => {
