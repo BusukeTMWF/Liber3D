@@ -14,29 +14,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// メモリ上でファイルを一時保持（multerの設定）
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Supabaseクライアントの初期化（自動整形付き）
 const rawUrl = process.env.SUPABASE_URL || '';
 const cleanUrl = rawUrl.trim().replace(/\/$/, '').replace(/^http:/, 'https');
 const supabase = createClient(cleanUrl, process.env.SUPABASE_ANON_KEY || '');
 
-// 💡 【超重要】公式ライブラリのバグを完全に回避する、最もプレーンなクラス構造のStateStore
-class SupabaseStateStore {
-  async set(key, val) {
-    await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
-  }
-  async get(key) {
-    const { data } = await supabase.from('oauth_states').select('value').eq('key', key).maybeSingle();
-    return data ? data.value : undefined;
-  }
-  async del(key) {
-    await supabase.from('oauth_states').delete().eq('key', key);
-  }
-}
-
-// 💡 OAuthクライアントの正式初期化
+// 👑 【王道の解決策】OAuthクライアントに「2つの必須の箱」を完璧に渡す
 const oauthClient = new NodeOAuthClient({
   clientMetadata: {
     client_name: 'Liber3D',
@@ -48,8 +32,32 @@ const oauthClient = new NodeOAuthClient({
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
   },
-  // 💡 new を使って完全に独立した実体（インスタンス）として渡すことで、内部での undefined エラーを物理的に防ぎます
-  stateStore: new SupabaseStateStore() 
+  // ① ログイン進行中の「一時的な鍵」を入れる箱
+  stateStore: {
+    async set(key, val) {
+      await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
+    },
+    async get(key) {
+      const { data } = await supabase.from('oauth_states').select('value').eq('key', key).maybeSingle();
+      return data ? data.value : undefined;
+    },
+    async del(key) {
+      await supabase.from('oauth_states').delete().eq('key', key);
+    }
+  },
+  // ② ログイン完了後の「ユーザーのセッション」を入れる箱（🚨 ここが欠落していたのが全エラーの元凶でした！）
+  sessionStore: {
+    async set(sub, sessionData) {
+      await supabase.from('users').upsert({ did: sub, session: sessionData, updated_at: new Date() });
+    },
+    async get(sub) {
+      const { data } = await supabase.from('users').select('session').eq('did', sub).maybeSingle();
+      return data ? data.session : undefined;
+    },
+    async del(sub) {
+      await supabase.from('users').delete().eq('did', sub);
+    }
+  }
 });
 
 const agent = new BskyAgent({ service: 'https://bsky.social' });
@@ -121,15 +129,9 @@ app.get('/api/login', async (req, res) => {
 
 app.get('/api/callback', async (req, res) => {
   try {
+    // 💡 ライブラリが全自動で sessionStore の機能を使い、usersテーブルにデータを保存・検証してくれます
     const result = await oauthClient.callback(req.query);
-    const session = result.session;
-    const did = session.did;
-
-    const { error: dbError } = await supabase
-      .from('users')
-      .upsert({ did: did, session: session, updated_at: new Date() });
-
-    if (dbError) throw dbError;
+    const did = result.session.did;
 
     const redirectUrl = process.env.FRONT_URL || '';
     res.redirect(`${redirectUrl}/?did=${did}`);
