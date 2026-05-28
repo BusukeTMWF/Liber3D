@@ -16,22 +16,29 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// ====== 👇 ここから書き換え 👇 ======
 const rawUrl = process.env.SUPABASE_URL || '';
 const cleanUrl = rawUrl.trim().replace(/\/$/, '').replace(/^http:/, 'https');
 const supabase = createClient(cleanUrl, process.env.SUPABASE_ANON_KEY || '');
 
-// 👑 【王道の解決策】OAuthクライアントに「2つの必須の箱」を完璧に渡す
+// 💡 【修正】Renderの環境変数が無い場合は、厳格なルールの通り「127.0.0.1」にフォールバックする
+const RE_URL = process.env.RE_URL ? process.env.RE_URL.replace(/\/$/, '') : 'http://127.0.0.1:3000';
+const FRONT_URL = process.env.FRONT_URL ? process.env.FRONT_URL.replace(/\/$/, '') : 'http://127.0.0.1:5173';
+
+// 👑 【王道の解決策】OAuthクライアント設定
 const oauthClient = new NodeOAuthClient({
   clientMetadata: {
     client_name: 'Liber3D',
-    client_id: process.env.RE_URL ? `${process.env.RE_URL}/client-metadata.json` : 'http://localhost:3000/client-metadata.json',
-    client_uri: process.env.FRONT_URL || 'http://localhost:5173',
-    redirect_uris: [process.env.RE_URL ? `${process.env.RE_URL}/api/callback` : 'http://localhost:3000/api/callback'],
+    client_id: `${RE_URL}/client-metadata.json`,
+    client_uri: FRONT_URL,
+    redirect_uris: [`${RE_URL}/api/callback`],
     scope: 'atproto transition:generic',
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
   },
+// ====== 👆 ここまで書き換え 👆 ======
+  // ① ログイン進行中の「一時的な鍵」を入れる箱 (stateStore: { ... はそのまま残す)
   // ① ログイン進行中の「一時的な鍵」を入れる箱
   stateStore: {
     async set(key, val) {
