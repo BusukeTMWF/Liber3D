@@ -117,32 +117,44 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
 // ==========================================
 // 🔒 ログイン＆コールバック ルーティング
 // ==========================================
+// ==========================================
+// 🔒 ログイン＆コールバック ルーティング
+// ==========================================
 app.get('/api/login', async (req, res) => {
   try {
     const logParam = req.query.handle || '';
     const handle = logParam.trim().replace(/^@/, '');
     if (!handle) return res.status(400).json({ error: 'Handle is required' });
 
-    const authUrl = await oauthClient.initiateLogin({
-      handle: handle,
-      state: Math.random().toString(36).substring(2),
+    // 💡 修正：initiateLogin ではなく authorize を使う！
+    // 複雑なState（一時的な鍵）の生成も、ライブラリが全自動でやってくれます。
+    const authUrl = await oauthClient.authorize(handle, {
+      scope: 'atproto transition:generic'
     });
     
-    res.json({ url: authUrl });
+    // 戻り値がURLオブジェクトなので、文字列化(toString)して返します
+    res.json({ url: authUrl.toString() });
   } catch (error) {
+    console.error('Login API Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.get('/api/callback', async (req, res) => {
   try {
-    // 💡 ライブラリが全自動で sessionStore の機能を使い、usersテーブルにデータを保存・検証してくれます
-    const result = await oauthClient.callback(req.query);
-    const did = result.session.did;
+    // 💡 修正：Expressのクエリを、ライブラリが読める標準形式(URLSearchParams)に変換して渡す
+    const params = new URLSearchParams(req.query);
+    
+    // callbackを実行した瞬間、裏で自動的に「sessionStore」が動き、Supabaseへ保存してくれます！
+    const { session } = await oauthClient.callback(params);
+    
+    // OAuthの仕様に則り、ユーザーのDIDを取得
+    const did = session.sub || session.did;
 
-    const redirectUrl = process.env.FRONT_URL || '';
+    const redirectUrl = process.env.FRONT_URL ? process.env.FRONT_URL.replace(/\/$/, '') : 'http://127.0.0.1:5173';
     res.redirect(`${redirectUrl}/?did=${did}`);
   } catch (error) {
+    console.error('Callback API Error:', error);
     res.status(500).send(`Callback Error: ${error.message}`);
   }
 });
