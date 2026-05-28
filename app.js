@@ -198,9 +198,15 @@ if (isViewMode) {
 
     // 💡 【修正】読み込む時もコロン(:)をハイフン(-)に置き換えてからURLを作る
     const safeDid = didParam.replaceAll(':', '-');
-    const fileUrl = `${supabaseUrl}/storage/v1/object/public/models/${safeDid}_${encodeURIComponent(nameParam)}.glb`;
-
-    // 倉庫からファイルを直接ダウンロードして画面に召喚！
+    const toHex = (str) => {
+        return Array.from(new TextEncoder().encode(str))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+    };
+    const safeName = toHex(nameParam);
+    
+    // 変換された英数字のファイル名を指定してダウンロード！
+    const fileUrl = `${supabaseUrl}/storage/v1/object/public/models/${safeDid}_${safeName}.glb`;    // 倉庫からファイルを直接ダウンロードして画面に召喚！
     // 倉庫からファイルを直接ダウンロードして画面に召喚！
     gltfLoader.load(fileUrl, (gltf) => {
         currentMesh = gltf.scene;

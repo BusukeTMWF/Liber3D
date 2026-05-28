@@ -125,7 +125,8 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
 
     // 💡 【修正】DIDの中のコロン(:)をすべてハイフン(-)に置き換えて、Supabaseが怒らない安全な名前にする
     const safeDid = did.replaceAll(':', '-');
-    const fileName = `${safeDid}_${encodeURIComponent(partName)}.glb`;
+    const safeName = Buffer.from(partName, 'utf8').toString('hex');
+    const fileName = `${safeDid}_${safeName}.glb`;
     
     const { error: storageError } = await supabase
       .storage
