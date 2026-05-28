@@ -215,8 +215,8 @@ function fitCameraToModel(modelScene) {
 // ------------------------------------------
 if (isViewMode) {
     const supabaseUrl = window.location.hostname === 'localhost' 
-        ? 'https://[あなたのSupabaseのプロジェクトID].supabase.co' 
-        : 'https://[あなたのSupabaseのプロジェクトID].supabase.co'; 
+        ? 'https://hjlhnymftgcewovvodcm.supabase.co' 
+        : 'https://hjlhnymftgcewovvodcm.supabase.co'; 
 
     // 💡 【修正】読み込む時もコロン(:)をハイフン(-)に置き換えてからURLを作る
     const safeDid = didParam.replaceAll(':', '-');
