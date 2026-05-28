@@ -25,13 +25,14 @@
         <h1>Liber3D</h1>
         <p style="font-size: 0.8rem; color: #aaa;">3Dプリントパーツ共有プラットフォーム</p>
         
-        <div id="login-form">
-                <form action="/api/login" method="GET">
-                    <input type="text" name="handle" id="handle" placeholder="あなたのユーザー名（例: user.bsky.social）" required>
-                <button type="submit" id="login-btn">🦋 Blueskyで安全にログイン</button>
-            </form>
-            <div class="notice">🔒 パスワードは不要です。Bluesky公式画面で認証を行います。</div>
-        </div>
+    <div id="login-form">
+        <h2>Liber3D ログイン</h2>
+        <p>Blueskyのアカウントでログインします。</p>
+    
+        <input type="text" id="bsky-handle" placeholder="例: yourname.bsky.social" style="padding: 10px; width: 80%; max-width: 300px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc; background-color: #333; color: white;" />
+        <br>
+        <button id="login-btn">Blueskyでログイン</button>
+    </div>
 
         <div id="profile-area">
             <p id="welcome-msg">ログイン情報を確認中...</p>

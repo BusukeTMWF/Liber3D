@@ -38,35 +38,43 @@ if (isViewMode) {
 }
 
 // ==========================================
-// 🚀 ログインボタンを押したときの処理
+// 🚀 ログインボタンを押したときの処理（ポップアップなし版）
 // ==========================================
-const loginBtn = document.getElementById('login-btn'); // 💡 HTMLのログインボタンのIDに合わせてください
-if (loginBtn) {
+const loginBtn = document.getElementById('login-btn');
+const handleInput = document.getElementById('bsky-handle'); // 💡 画面の入力欄を取得
+
+if (loginBtn && handleInput) {
     loginBtn.addEventListener('click', async () => {
-        // ユーザーにハンドル名（xxx.bsky.socialなど）を入力してもらう
-        const handle = prompt('Blueskyのハンドル名を入力してください\n（例: yourname.bsky.social）');
-        if (!handle) return;
+        // 入力欄からハンドル名を読み取り、前後の空白を消す
+        const handle = handleInput.value.trim();
+        
+        if (!handle) {
+            alert('Blueskyのハンドル名を入力してください！\n（例: yourname.bsky.social）');
+            return;
+        }
 
         loginBtn.innerText = '認証画面へ移動中...';
         loginBtn.disabled = true;
+        handleInput.disabled = true; // 💡 通信中は入力欄もロックするプロの気遣い
 
         try {
-            // 私たちが完成させた最強のバックエンドAPIを叩く！
             const response = await fetch(`/api/login?handle=${encodeURIComponent(handle)}`);
             const data = await response.json();
 
             if (data.url) {
-                // 返ってきたURL（通行証）へ、ブラウザを強制ジャンプさせる！
+                // 認証URLへジャンプ！
                 window.location.href = data.url;
             } else {
                 alert('ログインエラー: ' + (data.error || '不明なエラー'));
                 loginBtn.innerText = 'Blueskyでログイン';
                 loginBtn.disabled = false;
+                handleInput.disabled = false;
             }
         } catch (error) {
             alert('通信エラー: ' + error.message);
             loginBtn.innerText = 'Blueskyでログイン';
             loginBtn.disabled = false;
+            handleInput.disabled = false;
         }
     });
 }
