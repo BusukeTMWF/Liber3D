@@ -171,20 +171,42 @@ if (!isViewMode) {
 
 const gltfLoader = new GLTFLoader();
 
-// 💡 共通の自動ピント合わせ関数
+// ==========================================
+// 👑 プロ仕様：どんな3Dモデルもド真ん中に収める自動ピント調整
+// ==========================================
 function fitCameraToModel(modelScene) {
+    // 1. モデル全体の正確な「大きさの箱（Bounding Box）」を計算する
     const box = new THREE.Box3().setFromObject(modelScene);
     const center = new THREE.Vector3();
     box.getCenter(center);
-    modelScene.position.sub(center); // 完全に原点(0,0,0)に配置
+    
+    // 💡 重要：モデルの中心点が原点(0,0,0)からズレている場合、強制的に原点へ移動させる
+    modelScene.position.sub(center); 
 
+    // 2. モデルの縦・横・奥の「最大サイズ」を取得
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.4;
     
-    camera.position.set(0, maxDim * 0.2, cameraZ);
+    // 3. カメラの画角(FOV)から、モデルが綺麗に画面に収まる「最適な距離(Z軸)」を計算
+    const fov = camera.fov * (Math.PI / 180);
+    // 💡 1.5 という倍率（マージン）をかけることで、画面いっぱいにパツパツにならず、程よい余白を作ります
+    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5; 
+    
+    // 4. カメラのクリッピング（描画限界距離）をモデルのサイズに合わせて自動調整（巨大モデルのクリップ防止）
+    camera.near = maxDim / 100;
+    camera.far = maxDim * 100;
+    camera.updateProjectionMatrix();
+
+    // 5. カメラを「少し斜め上」に配置して、最初から一番立体感が伝わるアングルにする
+    // （真横からだと3D感が薄れるため、Y軸に少し高さを出すのが3Dビューアーの王道です）
+    camera.position.set(maxDim * 0.3, maxDim * 0.5, cameraZ);
+    
+    // 6. マウスでの回転の中心（ターゲット）を完全に(0,0,0)に固定
     controls.target.set(0, 0, 0);
+    
+    // 7. カメラと操作パネル（OrbitControls）を最新状態に同期
+    controls.maxDistance = maxDim * 10; // 無限に引きすぎて見失うのを防止
+    controls.minDistance = maxDim * 0.1; // 近づきすぎてモデルを突き抜けるのを防止
     controls.update();
 }
 
