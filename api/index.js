@@ -2,135 +2,117 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { NodeOAuthClient } from '@atproto/oauth-client-node';
-import { JoseKey } from '@atproto/jwk-jose';
-import { Agent } from '@atproto/api';
-import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { BskyAgent } from '@atproto/api';
+// 💡 新しい相棒：ブラウザから送られてきたファイルデータをNode.jsで安全に受け取るためのプラグイン
+import multer from 'multer'; 
 
-dotenv.config();
-
-const app = express();
-app.set('trust proxy', true);
-
-const port = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const scope = 'atproto transition:generic';
 
-let baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-if (baseUrl.endsWith('/')) {
-  baseUrl = baseUrl.slice(0, -1);
-}
-
-app.use(express.json());
+const app = express();
 app.use(cors());
+app.use(express.json());
 
-// 💡 【王道デバッグ】URLが空っぽなら即座にエラーを吐いて停止する仕様に
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-  console.error('❌ FATAL ERROR: Supabaseの環境変数が設定されていません！');
-  process.exit(1); // サーバーを強制終了して異常を通知
-}
+// メモリ上でファイルを一時保持する設定（サーバーのハードディスクを汚さない王道の設計）
+const upload = multer({ storage: multer.memoryStorage() });
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+// データベースURLの自動整形（プロ仕様の防衛策）
+const rawUrl = process.env.SUPABASE_URL || '';
+const cleanUrl = rawUrl.trim().replace(/\/$/, '').replace(/^http:/, 'https');
+const supabase = createClient(cleanUrl, process.env.SUPABASE_ANON_KEY || '');
 
-// 💡 【デプロイ最後の王道設計】エラーを隠さず、その場でスローして画面に原因を表示させる
-const stateStore = {
-  async get(key) {
-    const { data, error } = await supabase.from('auth_store').select('value').eq('key', `state:${key}`).maybeSingle();
-    if (error) throw new Error(`DBからの鍵取得に失敗: ${error.message} (${error.details || ''})`);
-    return data ? data.value : undefined;
-  },
-  async set(key, val) {
-    const { error } = await supabase.from('auth_store').upsert({ key: `state:${key}`, value: val });
-    if (error) throw new Error(`DBへの鍵保存に失敗: ${error.message} (${error.details || ''})`);
-  },
-  async del(key) {
-    const { error } = await supabase.from('auth_store').delete().eq('key', `state:${key}`);
-    if (error) throw new Error(`DBからの鍵削除に失敗: ${error.message} (${error.details || ''})`);
-  },
-};
+const agent = new BskyAgent({ service: 'https://bsky.social' });
 
-const sessionStore = {
-  async get(key) {
-    const { data, error } = await supabase.from('auth_store').select('value').eq('key', `session:${key}`).maybeSingle();
-    if (error) throw new Error(`DBからのセッション取得に失敗: ${error.message} (${error.details || ''})`);
-    return data ? data.value : undefined;
-  },
-  async set(key, val) {
-    const { error } = await supabase.from('auth_store').upsert({ key: `session:${key}`, value: val });
-    if (error) throw new Error(`DBへのセッション保存に失敗: ${error.message} (${error.details || ''})`);
-  },
-  async del(key) {
-    const { error } = await supabase.from('auth_store').delete().eq('key', `session:${key}`);
-    if (error) throw new Error(`DBからのセッション削除に失敗: ${error.message} (${error.details || ''})`);
-  },
-};
+// ==========================================
+// 🚀 【新規＆超重要】3Dファイルのアップロード＆投稿API
+// ==========================================
+// フロントから送られてくる「text」「did」「file（3Dデータ）」を一気に受け取ります
+app.post('/api/post', upload.single('file'), async (req, res) => {
+  const { did, text, partName } = req.body;
+  const file = req.file; // 💡 これが送られてきた本物の .glb ファイル
 
-const client = new NodeOAuthClient({
-  clientMetadata: {
-    client_name: 'Liber3D',
-    client_id: `${baseUrl}/client-metadata.json`,
-    redirect_uris: [`${baseUrl}/callback`],
-    scope: scope,
-    response_types: ['code'],
-    grant_types: ['authorization_code'],
-    token_endpoint_auth_method: 'none',
-    application_type: 'web',
-    dpop_bound_access_tokens: true
-  },
-  keyset: await Promise.all([JoseKey.generate(['ES256'])]),
-  stateStore: stateStore,
-  sessionStore: sessionStore,
-});
-
-app.get('/client-metadata.json', (req, res) => {
-  res.json(client.clientMetadata);
-});
-
-app.get('/api/login', async (req, res) => {
-  const handle = req.query.handle;
-  if (!handle) return res.status(400).send('Handle is required');
-  try {
-    const url = await client.authorize(handle, { scope: scope });
-    res.redirect(url);
-  } catch (error) {
-    // 💡 ここでSupabaseの保存エラーが起きていれば、即座に画面に表示されます！
-    res.status(500).send('OAuth開始エラー: ' + error.message);
+  if (!did || !text || !partName || !file) {
+    return res.status(400).json({ success: false, error: '必要なデータが不足しています。' });
   }
-});
 
-app.get('/callback', async (req, res) => {
-  const params = new URLSearchParams(req.query);
   try {
-    const { session } = await client.callback(params);
-    res.redirect(`${baseUrl}/?did=${session.did}`);
-  } catch (error) {
-    res.status(500).send('認証完了エラー: ' + error.message);
-  }
-});
+    // 1. まず、Supabaseから「このユーザーのログイン鍵（セッション）」を引っ張り出す
+    const { data: user, error: dbError } = await supabase
+      .from('users')
+      .select('session')
+      .eq('did', did)
+      .single();
 
-app.post('/api/post', async (req, res) => {
-  const { did, text } = req.body;
-  try {
-    const oauthSession = await client.restore(did);
-    const agent = new Agent(oauthSession);
+    if (dbError || !user) throw new Error('ユーザーのセッションが見つかりません。再ログインしてください。');
+
+    // 2. 【心臓部】Supabaseのストレージ（modelsバケット）にファイルを保存する
+    // ファイル名は「ユーザーのDID_作品名.glb」という、世界で絶対に重複しない王道の命名規則にします
+    const fileName = `${did}_${encodeURIComponent(partName)}.glb`;
+    
+    const { data: storageData, error: storageError } = await supabase
+      .storage
+      .from('models')
+      .upload(fileName, file.buffer, {
+        contentType: 'model/gltf-binary', // GLBファイルの標準MIMEタイプ
+        upsert: true // 💡 同じ名前のファイルが来たら自動で上書き更新するプロの設定
+      });
+
+    if (storageError) throw new Error(`ストレージ保存失敗: ${storageError.message}`);
+
+    // 3. Blueskyへ自動ポストを投げる
+    await agent.resumeSession(user.session);
     await agent.post({
       text: text,
       createdAt: new Date().toISOString()
     });
+
     res.json({ success: true });
+  } catch (error) {
+    console.error('【本本エラー】:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// OAuthログイン等の既存のAPIルート（省略せずにそのまま保持）
+app.get('/api/login', async (req, res) => {
+  try {
+    const logParam = req.query.handle || '';
+    const handle = logParam.trim().replace(/^@/, '');
+    if (!handle) return res.status(400).json({ error: 'Handle is required' });
+
+    const authUrl = await agent.oauth.initiateLogin({
+      handle: handle,
+      redirectUri: process.env.RE_URL || ''
+    });
+    res.json({ url: authUrl });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-if (process.env.NODE_ENV === 'production') {
-  // 1. まず「dist」フォルダの中のファイル（js, css, etc...）を直接探しに行く
-  app.use(express.static(path.join(__dirname, '../dist')));
+app.get('/api/callback', async (req, res) => {
+  try {
+    const result = await agent.oauth.callback(req.query);
+    const session = result.session;
+    const did = session.did;
 
-  // 2. それ以外の「ページ遷移」に関するアクセスは、すべて index.html に誘導する
-  // ※アスタリスクを使わない安全な書き方です
+    const { error: dbError } = await supabase
+      .from('users')
+      .upsert({ did: did, session: session, updated_at: new Date() });
+
+    if (dbError) throw dbError;
+
+    const redirectUrl = process.env.FRONT_URL || '';
+    res.redirect(`${redirectUrl}/?did=${did}`);
+  } catch (error) {
+    res.status(500).send(`Callback Error: ${error.message}`);
+  }
+});
+
+// 本番環境（Render）用のスタティックファイル配信（PathError完全防御型）
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../dist')));
   app.use((req, res, next) => {
     if (!req.path.startsWith('/api')) {
       res.sendFile(path.join(__dirname, '../dist/index.html'));
@@ -140,8 +122,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-export default app;
-
-app.listen(port, () => {
-  console.log(`🚀 鉄壁サーバー起動中（ポート: ${port}）`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });

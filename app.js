@@ -6,31 +6,26 @@ let isLoggedIn = false;
 let isFileLoaded = false;
 let userDid = null;
 let currentMesh = null;
+let rawUploadedFile = null; // 💡 投稿するために、ドロップされたファイルを生データとして記憶する変数
 
-// ==========================================
-// 🧭 [新規] URLのパラメータを解析
-// ==========================================
 const urlParams = new URLSearchParams(window.location.search);
-const didParam = urlParams.get('did');     // 投稿者のID
-const nameParam = urlParams.get('name');   // 作品名
-const isViewMode = didParam && nameParam;  // 両方あれば「見る専用モード」
+const didParam = urlParams.get('did');     
+const nameParam = urlParams.get('name');   
+const isViewMode = didParam && nameParam;  
 
 // ==========================================
 // 1. 画面の表示切り替え（UIコントロール）
 // ==========================================
 if (isViewMode) {
-    // 💡 見る専用モード：すべてのフォームを隠し、タイトルだけを出す
     document.getElementById('login-form').style.display = 'none';
     document.getElementById('profile-area').style.display = 'none';
     document.getElementById('upload-form').style.display = 'none';
     
-    // 画面に「〇〇さんの作品」と表示（後ほどHTML側にも反映させます）
     const header = document.createElement('div');
     header.id = 'viewer-header';
     header.innerHTML = `<h1>🎨 ${nameParam}</h1><p>Created by: ${didParam.substring(0, 15)}...</p>`;
     document.body.appendChild(header);
 } else {
-    // 💡 従来の投稿モード
     if (didParam) {
         userDid = didParam;
         isLoggedIn = true;
@@ -43,33 +38,38 @@ if (isViewMode) {
 }
 
 // ==========================================
-// 2. 投稿ボタンを押したときの処理（自動シェアURLの生成）
+// 2. 投稿ボタンを押したときの処理（ファイル同梱・マルチパート送信）
 // ==========================================
 document.getElementById('upload-btn').addEventListener('click', async () => {
     const partName = document.getElementById('part-name').value;
-    if (!partName) return;
+    if (!partName || !rawUploadedFile) return;
 
     const uploadBtn = document.getElementById('upload-btn');
     try {
-        uploadBtn.innerText = '投稿中...';
+        uploadBtn.innerText = '3Dデータを倉庫に保存中...';
         uploadBtn.disabled = true;
 
-        // 💡 【超・王道】Blueskyのタイムラインに流す「専用ビューアーURL」を自動組み立て！
         const currentUrl = window.location.origin;
         const shareUrl = `${currentUrl}/?did=${userDid}&name=${encodeURIComponent(partName)}`;
-        
         const postText = `【Liber3D】\n3D作品「${partName}」を登録しました！\nブラウザでグリグリ動かして見られます！👇\n${shareUrl}\n\n#Liber3D`;
+
+        // 💡 ファイルと文字を同時に送るため、「FormData」という箱に荷物を詰める（WEBの王道技術）
+        const formData = new FormData();
+        formData.append('did', userDid);
+        formData.append('partName', partName);
+        formData.append('text', postText);
+        formData.append('file', rawUploadedFile); // 本物のファイルデータを同梱！
 
         const response = await fetch('/api/post', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ did: userDid, text: postText })
+            body: formData // ⚠️ Content-Typeヘッダーはブラウザが自動設定するのでここでは書かないのがプロの鉄則
         });
 
         const result = await response.json();
         if (result.success) {
-            alert(`🎉「${partName}」をBlueskyにシェアしました！`);
+            alert(`🎉「${partName}」を倉庫に保存し、Blueskyにシェアしました！`);
             document.getElementById('part-name').value = '';
+            rawUploadedFile = null;
         } else {
             alert('投稿エラー: ' + result.error);
         }
@@ -118,25 +118,60 @@ const dirLight2 = new THREE.DirectionalLight(0xaaccff, 0.6);
 dirLight2.position.set(-1, -1, -1).normalize();
 scene.add(dirLight2);
 
-// 初期表示の立方体（見る専用モードなら非表示にする）
-const geometry = new THREE.BoxGeometry(20, 20, 20);
-const material = new THREE.MeshStandardMaterial({ color: 0x00a0e9, roughness: 0.2, metalness: 0.5 });
-let cube = new THREE.Mesh(geometry, material);
-
+// 初期表示の立方体（投稿モードの時だけ出す）
+let cube = null;
 if (!isViewMode) {
+    const geometry = new THREE.BoxGeometry(20, 20, 20);
+    const material = new THREE.MeshStandardMaterial({ color: 0x00a0e9, roughness: 0.2, metalness: 0.5 });
+    cube = new THREE.Mesh(geometry, material);
     scene.add(cube);
-} else {
-    // 💡 [次回の布石] 見る専用モードの時は、ここにSupabaseから3Dデータを自動ロードする処理が入ります
-    // 現段階では、確認用にダミーの球体を表示させておきます
-    const sphereGeo = new THREE.SphereGeometry(15, 32, 32);
-    const sphereMat = new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.1, metalness: 0.8 });
-    const dummyModel = new THREE.Mesh(sphereGeo, sphereMat);
-    scene.add(dummyModel);
 }
 
 const gltfLoader = new GLTFLoader();
 
-// 💡 投稿モードの時だけファイルのドロップを受け付ける（勝手に上書きされるのを防ぐ）
+// 💡 共通の自動ピント合わせ関数
+function fitCameraToModel(modelScene) {
+    const box = new THREE.Box3().setFromObject(modelScene);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    modelScene.position.sub(center); // 完全に原点(0,0,0)に配置
+
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.4;
+    
+    camera.position.set(0, maxDim * 0.2, cameraZ);
+    controls.target.set(0, 0, 0);
+    controls.update();
+}
+
+// ------------------------------------------
+// 🚀 【新規】「見る専用モード」の時：Supabaseの倉庫から本物のファイルを全自動ロード！
+// ------------------------------------------
+if (isViewMode) {
+    // あなたのSupabaseのStorage公開URLを自動組み立て
+    // ⚠️ 後のステップで動作確認する際、ここだけご自身のSupabaseのURLが正しいか確認してください
+    const supabaseUrl = window.location.hostname === 'localhost' 
+        ? 'https://[あなたのSupabaseのプロジェクトID].supabase.co' // ローカルテスト用
+        : 'https://[あなたのSupabaseのプロジェクトID].supabase.co'; // 本番用（環境変数から読めないフロントなので直書きが確実です）
+
+    const fileUrl = `${supabaseUrl}/storage/v1/object/public/models/${didParam}_${encodeURIComponent(nameParam)}.glb`;
+
+    // 倉庫からファイルを直接ダウンロードして画面に召喚！
+    gltfLoader.load(fileUrl, (gltf) => {
+        currentMesh = gltf.scene;
+        scene.add(currentMesh);
+        fitCameraToModel(currentMesh);
+    }, undefined, (error) => {
+        console.error('3Dデータのロードに失敗しました:', error);
+        alert('作品データの読み込みに失敗しました。URLが正しいか、またはデータが削除されている可能性があります。');
+    });
+}
+
+// ------------------------------------------
+// 投稿モードの時だけファイルのドロップを受け付ける
+// ------------------------------------------
 if (!isViewMode) {
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', async (e) => {
@@ -147,26 +182,15 @@ if (!isViewMode) {
         if (cube) { scene.remove(cube); cube = null; }
         if (currentMesh) { scene.remove(currentMesh); }
 
+        rawUploadedFile = file; // 💡 サーバーに送るために生データをキープ！
+
         const reader = new FileReader();
         reader.readAsArrayBuffer(file);
         reader.onload = function (event) {
             gltfLoader.parse(event.target.result, '', (gltf) => {
                 currentMesh = gltf.scene;
-                
-                const box = new THREE.Box3().setFromObject(currentMesh);
-                const center = new THREE.Vector3();
-                box.getCenter(center);
-                currentMesh.position.sub(center);
                 scene.add(currentMesh);
-
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const fov = camera.fov * (Math.PI / 180);
-                let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.4;
-                
-                camera.position.set(0, maxDim * 0.2, cameraZ);
-                controls.target.set(0, 0, 0);
-                controls.update();
+                fitCameraToModel(currentMesh);
 
                 isFileLoaded = true;
                 checkReadyToUpload();
