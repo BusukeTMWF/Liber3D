@@ -94,7 +94,7 @@ const oauthClient = new NodeOAuthClient({
   }
 });
 
-const agent = new BskyAgent({ service: 'https://bsky.social' });
+const agent = new Agent({ service: 'https://bsky.social' });
 
 // ==========================================
 // 🚀 名刺の配信ルート（固定した名刺と全く同じものを返す）
