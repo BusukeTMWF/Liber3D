@@ -38,6 +38,40 @@ if (isViewMode) {
 }
 
 // ==========================================
+// 🚀 ログインボタンを押したときの処理
+// ==========================================
+const loginBtn = document.getElementById('login-btn'); // 💡 HTMLのログインボタンのIDに合わせてください
+if (loginBtn) {
+    loginBtn.addEventListener('click', async () => {
+        // ユーザーにハンドル名（xxx.bsky.socialなど）を入力してもらう
+        const handle = prompt('Blueskyのハンドル名を入力してください\n（例: yourname.bsky.social）');
+        if (!handle) return;
+
+        loginBtn.innerText = '認証画面へ移動中...';
+        loginBtn.disabled = true;
+
+        try {
+            // 私たちが完成させた最強のバックエンドAPIを叩く！
+            const response = await fetch(`/api/login?handle=${encodeURIComponent(handle)}`);
+            const data = await response.json();
+
+            if (data.url) {
+                // 返ってきたURL（通行証）へ、ブラウザを強制ジャンプさせる！
+                window.location.href = data.url;
+            } else {
+                alert('ログインエラー: ' + (data.error || '不明なエラー'));
+                loginBtn.innerText = 'Blueskyでログイン';
+                loginBtn.disabled = false;
+            }
+        } catch (error) {
+            alert('通信エラー: ' + error.message);
+            loginBtn.innerText = 'Blueskyでログイン';
+            loginBtn.disabled = false;
+        }
+    });
+}
+
+// ==========================================
 // 2. 投稿ボタンを押したときの処理（ファイル同梱・マルチパート送信）
 // ==========================================
 document.getElementById('upload-btn').addEventListener('click', async () => {
