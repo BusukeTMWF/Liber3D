@@ -16,30 +16,29 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ====== 👇 ここから書き換え 👇 ======
+// データベースとURLの安全な初期化
 const rawUrl = process.env.SUPABASE_URL || '';
 const cleanUrl = rawUrl.trim().replace(/\/$/, '').replace(/^http:/, 'https');
 const supabase = createClient(cleanUrl, process.env.SUPABASE_ANON_KEY || '');
 
-// 💡 【修正】Renderの環境変数が無い場合は、厳格なルールの通り「127.0.0.1」にフォールバックする
 const RE_URL = process.env.RE_URL ? process.env.RE_URL.replace(/\/$/, '') : 'http://127.0.0.1:3000';
 const FRONT_URL = process.env.FRONT_URL ? process.env.FRONT_URL.replace(/\/$/, '') : 'http://127.0.0.1:5173';
 
-// 👑 【王道の解決策】OAuthクライアント設定
+// 👑 【完全解決策】名刺データ（メタデータ）を1つの変数に固定する
+const clientMetadata = {
+  client_name: 'Liber3D',
+  client_id: `${RE_URL}/client-metadata.json`,
+  client_uri: FRONT_URL,
+  redirect_uris: [`${RE_URL}/api/callback`],
+  scope: 'atproto transition:generic',
+  grant_types: ['authorization_code', 'refresh_token'],
+  response_types: ['code'],
+  token_endpoint_auth_method: 'none',
+};
+
+// OAuthクライアントに固定した名刺を渡す
 const oauthClient = new NodeOAuthClient({
-  clientMetadata: {
-    client_name: 'Liber3D',
-    client_id: `${RE_URL}/client-metadata.json`,
-    client_uri: FRONT_URL,
-    redirect_uris: [`${RE_URL}/api/callback`],
-    scope: 'atproto transition:generic',
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-    token_endpoint_auth_method: 'none',
-  },
-// ====== 👆 ここまで書き換え 👆 ======
-  // ① ログイン進行中の「一時的な鍵」を入れる箱 (stateStore: { ... はそのまま残す)
-  // ① ログイン進行中の「一時的な鍵」を入れる箱
+  clientMetadata: clientMetadata,
   stateStore: {
     async set(key, val) {
       await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
@@ -52,7 +51,6 @@ const oauthClient = new NodeOAuthClient({
       await supabase.from('oauth_states').delete().eq('key', key);
     }
   },
-  // ② ログイン完了後の「ユーザーのセッション」を入れる箱（🚨 ここが欠落していたのが全エラーの元凶でした！）
   sessionStore: {
     async set(sub, sessionData) {
       await supabase.from('users').upsert({ did: sub, session: sessionData, updated_at: new Date() });
@@ -68,6 +66,13 @@ const oauthClient = new NodeOAuthClient({
 });
 
 const agent = new BskyAgent({ service: 'https://bsky.social' });
+
+// ==========================================
+// 🚀 名刺の配信ルート（固定した名刺と全く同じものを返す）
+// ==========================================
+app.get('/client-metadata.json', (req, res) => {
+  res.json(clientMetadata);
+});
 
 // ==========================================
 // 🚀 3Dファイルのアップロード＆投稿API
@@ -114,18 +119,6 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
   }
 });
 
-app.get('/client-metadata.json', (req, res) => {
-  res.json({
-    client_name: 'Liber3D',
-    client_id: process.env.RE_URL ? `${process.env.RE_URL}/client-metadata.json` : 'http://127.0.0.1:3000/client-metadata.json',
-    client_uri: process.env.FRONT_URL ? process.env.FRONT_URL.replace(/\/$/, '') : 'http://127.0.0.1:5173',
-    redirect_uris: [process.env.RE_URL ? `${process.env.RE_URL}/api/callback` : 'http://127.0.0.1:3000/api/callback'],
-    scope: 'atproto transition:generic',
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-    token_endpoint_auth_method: 'none',
-  });
-});
 // ==========================================
 // 🔒 ログイン＆コールバック ルーティング
 // ==========================================
@@ -135,13 +128,10 @@ app.get('/api/login', async (req, res) => {
     const handle = logParam.trim().replace(/^@/, '');
     if (!handle) return res.status(400).json({ error: 'Handle is required' });
 
-    // 💡 修正：initiateLogin ではなく authorize を使う！
-    // 複雑なState（一時的な鍵）の生成も、ライブラリが全自動でやってくれます。
     const authUrl = await oauthClient.authorize(handle, {
       scope: 'atproto transition:generic'
     });
     
-    // 戻り値がURLオブジェクトなので、文字列化(toString)して返します
     res.json({ url: authUrl.toString() });
   } catch (error) {
     console.error('Login API Error:', error);
@@ -151,17 +141,11 @@ app.get('/api/login', async (req, res) => {
 
 app.get('/api/callback', async (req, res) => {
   try {
-    // 💡 修正：Expressのクエリを、ライブラリが読める標準形式(URLSearchParams)に変換して渡す
     const params = new URLSearchParams(req.query);
-    
-    // callbackを実行した瞬間、裏で自動的に「sessionStore」が動き、Supabaseへ保存してくれます！
     const { session } = await oauthClient.callback(params);
-    
-    // OAuthの仕様に則り、ユーザーのDIDを取得
     const did = session.sub || session.did;
 
-    const redirectUrl = process.env.FRONT_URL ? process.env.FRONT_URL.replace(/\/$/, '') : 'http://127.0.0.1:5173';
-    res.redirect(`${redirectUrl}/?did=${did}`);
+    res.redirect(`${FRONT_URL}/?did=${did}`);
   } catch (error) {
     console.error('Callback API Error:', error);
     res.status(500).send(`Callback Error: ${error.message}`);
