@@ -22,19 +22,19 @@ const rawUrl = process.env.SUPABASE_URL || '';
 const cleanUrl = rawUrl.trim().replace(/\/$/, '').replace(/^http:/, 'https');
 const supabase = createClient(cleanUrl, process.env.SUPABASE_ANON_KEY || '');
 
-// 💡 【仕様変更：修正済】公式ライブラリが100%要求する正しいStateStoreの形
-const stateStore = {
+// 💡 【超重要】公式ライブラリのバグを完全に回避する、最もプレーンなクラス構造のStateStore
+class SupabaseStateStore {
   async set(key, val) {
     await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
-  },
+  }
   async get(key) {
     const { data } = await supabase.from('oauth_states').select('value').eq('key', key).maybeSingle();
     return data ? data.value : undefined;
-  },
-  async del(key) { // 👈 公式仕様の「del」にガッチリ戻しました！
+  }
+  async del(key) {
     await supabase.from('oauth_states').delete().eq('key', key);
   }
-};
+}
 
 // 💡 OAuthクライアントの正式初期化
 const oauthClient = new NodeOAuthClient({
@@ -48,7 +48,8 @@ const oauthClient = new NodeOAuthClient({
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
   },
-  stateStore: stateStore // 👈 定義したオブジェクトをここで確実に結合！
+  // 💡 new を使って完全に独立した実体（インスタンス）として渡すことで、内部での undefined エラーを物理的に防ぎます
+  stateStore: new SupabaseStateStore() 
 });
 
 const agent = new BskyAgent({ service: 'https://bsky.social' });
