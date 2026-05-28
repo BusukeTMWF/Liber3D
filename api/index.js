@@ -39,27 +39,54 @@ const clientMetadata = {
 };
 
 // OAuthクライアントに固定した名刺を渡す
+// 👑 【修正】オブジェクトデータをJSONテキストに変換して安全に保存・解凍する
 const oauthClient = new NodeOAuthClient({
   clientMetadata: clientMetadata,
+  
+  // ① ログイン進行中の「一時的な鍵」を入れる箱
   stateStore: {
     async set(key, val) {
-      await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
+      // 💡 保存時に val を JSON 文字列にパック（stringify）する！
+      await supabase.from('oauth_states').upsert({ 
+        key, 
+        value: JSON.stringify(val), 
+        expires_at: new Date(Date.now() + 600000) 
+      });
     },
     async get(key) {
       const { data } = await supabase.from('oauth_states').select('value').eq('key', key).maybeSingle();
-      return data ? data.value : undefined;
+      if (!data) return undefined;
+      try {
+        // 💡 取得時に JSON 文字列を元のオブジェクトに解凍（parse）する！
+        return typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      } catch (e) {
+        return undefined;
+      }
     },
     async del(key) {
       await supabase.from('oauth_states').delete().eq('key', key);
     }
   },
+
+  // ② ログイン完了後の「ユーザーのセッション」を入れる箱
   sessionStore: {
     async set(sub, sessionData) {
-      await supabase.from('users').upsert({ did: sub, session: sessionData, updated_at: new Date() });
+      // 💡 こちらも同様にパックする！
+      await supabase.from('users').upsert({ 
+        did: sub, 
+        session: JSON.stringify(sessionData), 
+        updated_at: new Date() 
+      });
     },
     async get(sub) {
       const { data } = await supabase.from('users').select('session').eq('did', sub).maybeSingle();
-      return data ? data.session : undefined;
+      if (!data) return undefined;
+      try {
+        // 💡 こちらも解凍する！
+        return typeof data.session === 'string' ? JSON.parse(data.session) : data.session;
+      } catch (e) {
+        return undefined;
+      }
     },
     async del(sub) {
       await supabase.from('users').delete().eq('did', sub);
