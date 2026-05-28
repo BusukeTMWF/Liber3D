@@ -35,7 +35,6 @@ const oauthClient = new NodeOAuthClient({
     token_endpoint_auth_method: 'none',
   },
   stateStore: {
-    // State（一時的な鍵）の保存先として、Supabaseの強固なデータベースを使い回す王道設計
     async set(key, val) {
       await supabase.from('oauth_states').upsert({ key, value: val, expires_at: new Date(Date.now() + 600000) });
     },
@@ -43,7 +42,8 @@ const oauthClient = new NodeOAuthClient({
       const { data } = await supabase.from('oauth_states').select('value').eq('key', key).single();
       return data ? data.value : undefined;
     },
-    async del(key) {
+    // 👇 名前を「delete」に修正（Expressの strict モードでもバグらないようにクォーテーションで囲むのがプロの王道です）
+    async "delete"(key) {
       await supabase.from('oauth_states').delete().eq('key', key);
     }
   }
