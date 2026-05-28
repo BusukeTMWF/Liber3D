@@ -114,9 +114,18 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
   }
 });
 
-// ==========================================
-// 🔒 ログイン＆コールバック ルーティング
-// ==========================================
+app.get('/client-metadata.json', (req, res) => {
+  res.json({
+    client_name: 'Liber3D',
+    client_id: process.env.RE_URL ? `${process.env.RE_URL}/client-metadata.json` : 'http://127.0.0.1:3000/client-metadata.json',
+    client_uri: process.env.FRONT_URL ? process.env.FRONT_URL.replace(/\/$/, '') : 'http://127.0.0.1:5173',
+    redirect_uris: [process.env.RE_URL ? `${process.env.RE_URL}/api/callback` : 'http://127.0.0.1:3000/api/callback'],
+    scope: 'atproto transition:generic',
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'none',
+  });
+});
 // ==========================================
 // 🔒 ログイン＆コールバック ルーティング
 // ==========================================
