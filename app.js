@@ -192,14 +192,15 @@ function fitCameraToModel(modelScene) {
 // 🚀 【新規】「見る専用モード」の時：Supabaseの倉庫から本物のファイルを全自動ロード！
 // ------------------------------------------
 if (isViewMode) {
-    // あなたのSupabaseのStorage公開URLを自動組み立て
-    // ⚠️ 後のステップで動作確認する際、ここだけご自身のSupabaseのURLが正しいか確認してください
     const supabaseUrl = window.location.hostname === 'localhost' 
-        ? 'https://[あなたのSupabaseのプロジェクトID].supabase.co' // ローカルテスト用
-        : 'https://[あなたのSupabaseのプロジェクトID].supabase.co'; // 本番用（環境変数から読めないフロントなので直書きが確実です）
+        ? 'https://[あなたのSupabaseのプロジェクトID].supabase.co' 
+        : 'https://[あなたのSupabaseのプロジェクトID].supabase.co'; 
 
-    const fileUrl = `${supabaseUrl}/storage/v1/object/public/models/${didParam}_${encodeURIComponent(nameParam)}.glb`;
+    // 💡 【修正】読み込む時もコロン(:)をハイフン(-)に置き換えてからURLを作る
+    const safeDid = didParam.replaceAll(':', '-');
+    const fileUrl = `${supabaseUrl}/storage/v1/object/public/models/${safeDid}_${encodeURIComponent(nameParam)}.glb`;
 
+    // 倉庫からファイルを直接ダウンロードして画面に召喚！
     // 倉庫からファイルを直接ダウンロードして画面に召喚！
     gltfLoader.load(fileUrl, (gltf) => {
         currentMesh = gltf.scene;

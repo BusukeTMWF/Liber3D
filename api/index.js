@@ -123,7 +123,9 @@ app.post('/api/post', upload.single('file'), async (req, res) => {
 
     if (dbError || !user) throw new Error('ユーザーのセッションが見つかりません。再ログインしてください。');
 
-    const fileName = `${did}_${encodeURIComponent(partName)}.glb`;
+    // 💡 【修正】DIDの中のコロン(:)をすべてハイフン(-)に置き換えて、Supabaseが怒らない安全な名前にする
+    const safeDid = did.replaceAll(':', '-');
+    const fileName = `${safeDid}_${encodeURIComponent(partName)}.glb`;
     
     const { error: storageError } = await supabase
       .storage
